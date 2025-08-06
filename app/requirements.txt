@@ -1,0 +1,12 @@
+fastapi[standard]
+uvicorn[standard]
+python-dotenv
+pdfplumber
+python-docx
+aiofiles
+openai
+tiktoken
+pinecone-client
+sqlalchemy
+asyncpg
+striprtf
