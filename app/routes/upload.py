@@ -1,5 +1,5 @@
 from fastapi import APIRouter, UploadFile, File, HTTPException, status
-from services.supabase_upload import upload_file_to_supabase
+from app.services.supabase_upload import upload_file_to_supabase
 
 router = APIRouter()
 

@@ -1,9 +1,9 @@
 from fastapi import FastAPI, Depends
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
-from db.database import get_db, engine, Base
+from app.db.database import get_db, engine, Base
 from contextlib import asynccontextmanager
-from routes import upload  # Importa el router correctamente
+from app.routes import upload  # Importa el router correctamente
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -12,8 +12,8 @@ async def lifespan(app: FastAPI):
         await conn.run_sync(Base.metadata.create_all)
 
     yield  # 👈 Aquí arranca la app
-
     # Aquí puedes cerrar conexiones si necesitas
+    await engine.dispose()
 
 app = FastAPI(lifespan=lifespan)
 app.include_router(upload.router, prefix="/api", tags=["upload"])
