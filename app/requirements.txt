@@ -10,3 +10,4 @@ pinecone-client
 sqlalchemy
 asyncpg
 striprtf
+supabase

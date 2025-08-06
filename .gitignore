@@ -31,8 +31,6 @@ var/
 
 # Installer logs
 debug.log
-pip-log.txt
-pip-delete-this-directory.txt
 
 # Unit test / coverage reports
 htmlcov/
@@ -66,7 +64,7 @@ instance/
 docs/_build/
 
 # PyBuilder
-.target/
+target/
 
 # Jupyter Notebook
 .ipynb_checkpoints
@@ -126,13 +124,16 @@ venv.bak/
 # Cython debug symbols
 cython_debug/
 
-# PyCharm
-.idea/
-*.iml
-
 # VS Code
 .vscode/
+
+# PyCharm
+.idea/
+
+# Local .env files
+*.env
 
 # System files
 .DS_Store
 Thumbs.db
+
