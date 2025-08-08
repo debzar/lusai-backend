@@ -15,12 +15,19 @@ async def lifespan(app: FastAPI):
     # Aquí puedes cerrar conexiones si necesitas
     await engine.dispose()
 
-app = FastAPI(lifespan=lifespan)
-app.include_router(upload.router, prefix="/api", tags=["upload"])
+app = FastAPI(
+    title="IUSAI API",
+    description="API para la gestión de documentos legales",
+    version="0.1.0",
+    lifespan=lifespan
+)
+
+# Registrar las rutas de archivos con el prefijo /api/files
+app.include_router(upload.router, prefix="/api/files", tags=["files"])
 
 @app.get("/")
 def root():
-    return {"message": "API de subida de archivos activa"}
+    return {"message": "API de IUSAI activa", "docs": "/docs"}
 
 @app.get("/ping-db")
 async def ping_db(session: AsyncSession = Depends(get_db)):
