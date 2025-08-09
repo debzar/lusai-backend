@@ -9,6 +9,7 @@ import traceback
 from app.services.supabase_upload import upload_file_to_supabase, delete_file_from_supabase
 from app.services.text_extractor import extract_text_from_bytes
 from app.services.docs_service import create_document, get_document, list_documents, count_documents
+from app.services.file_validator import validate_file_extension
 from app.db.database import get_db
 from app.models.document import Document
 
@@ -43,7 +44,7 @@ async def upload_file(
     Returns:
         Un objeto JSON con id, filename, url y preview del texto extraído
     """
-    # Validar tipo de archivo
+    # Validar tipo de archivo declarado
     if file.content_type not in ALLOWED_TYPES:
         logger.warning(f"Tipo de archivo no permitido: {file.content_type}")
         raise HTTPException(
@@ -69,17 +70,35 @@ async def upload_file(
             detail="El archivo está vacío."
         )
 
+    # Validar que la extensión coincida con el contenido real del archivo
+    is_valid, message, detected_type = validate_file_extension(
+        filename=file.filename,
+        content_type=file.content_type,
+        file_bytes=file_bytes
+    )
+
+    if not is_valid:
+        logger.warning(f"Inconsistencia en extensión/tipo: {message}")
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=message
+        )
+
+    # Usar el tipo detectado si está disponible
+    effective_content_type = detected_type or file.content_type
+    logger.info(f"Tipo de contenido validado: {effective_content_type}")
+
     public_url = None
 
     try:
         # Subir archivo a Supabase
         logger.info(f"Intentando subir archivo {file.filename} a Supabase")
-        public_url = upload_file_to_supabase(file_bytes, file.filename, file.content_type)
+        public_url = upload_file_to_supabase(file_bytes, file.filename, effective_content_type)
         logger.info(f"Archivo subido exitosamente a: {public_url}")
 
         # Extraer texto del documento
         logger.info("Extrayendo texto del documento...")
-        extracted_text = extract_text_from_bytes(file_bytes, file.content_type)
+        extracted_text = extract_text_from_bytes(file_bytes, effective_content_type)
         logger.debug(f"Texto extraído (primeros 100 caracteres): {extracted_text[:100] if extracted_text else None}")
 
         # Crear vista previa (primeros 1000 caracteres)
@@ -92,7 +111,7 @@ async def upload_file(
                 db=db,
                 filename=file.filename,
                 url=public_url,
-                content_type=file.content_type,
+                content_type=effective_content_type,
                 text_preview=text_preview,
                 full_text=extracted_text
             )
