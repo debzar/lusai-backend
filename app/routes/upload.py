@@ -1,8 +1,8 @@
 from fastapi import APIRouter, UploadFile, File, HTTPException, status, Depends, Path, Query
-from fastapi.responses import PlainTextResponse
+from fastapi.responses import PlainTextResponse, JSONResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 import uuid
-from typing import List, Optional
+from typing import List, Optional, Dict, Any
 import logging
 import traceback
 
@@ -47,9 +47,13 @@ async def upload_file(
     # Validar tipo de archivo declarado
     if file.content_type not in ALLOWED_TYPES:
         logger.warning(f"Tipo de archivo no permitido: {file.content_type}")
-        raise HTTPException(
+        return JSONResponse(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Tipo de archivo no permitido. Solo PDF, DOC, DOCX o RTF. Recibido: {file.content_type}"
+            content={
+                "code": 400,
+                "status": "error",
+                "detail": f"Tipo de archivo no permitido. Solo PDF, DOC, DOCX o RTF. Recibido: {file.content_type}"
+            }
         )
 
     # Leer el archivo
@@ -58,16 +62,24 @@ async def upload_file(
     # Validar tamaño del archivo
     if len(file_bytes) > MAX_FILE_SIZE:
         logger.warning(f"Archivo demasiado grande: {len(file_bytes)} bytes")
-        raise HTTPException(
+        return JSONResponse(
             status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
-            detail=f"El archivo excede el tamaño máximo permitido de {MAX_FILE_SIZE/1024/1024}MB"
+            content={
+                "code": 413,
+                "status": "error",
+                "detail": f"El archivo excede el tamaño máximo permitido de {MAX_FILE_SIZE/1024/1024}MB"
+            }
         )
 
     if len(file_bytes) == 0:
         logger.warning("Archivo vacío")
-        raise HTTPException(
+        return JSONResponse(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="El archivo está vacío."
+            content={
+                "code": 400,
+                "status": "error",
+                "detail": "El archivo está vacío."
+            }
         )
 
     # Validar que la extensión coincida con el contenido real del archivo
@@ -79,9 +91,13 @@ async def upload_file(
 
     if not is_valid:
         logger.warning(f"Inconsistencia en extensión/tipo: {message}")
-        raise HTTPException(
+        return JSONResponse(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail=message
+            content={
+                "code": 422,
+                "status": "error",
+                "detail": message
+            }
         )
 
     # Usar el tipo detectado si está disponible
@@ -121,13 +137,20 @@ async def upload_file(
             logger.error(traceback.format_exc())
             raise
 
-        # Devolver respuesta
-        return {
-            "id": str(document.id),
-            "filename": document.filename,
-            "url": document.url,
-            "preview": document.text_preview
-        }
+        # Devolver respuesta con formato estandarizado
+        return JSONResponse(
+            status_code=status.HTTP_201_CREATED,
+            content={
+                "code": 201,
+                "status": "success",
+                "data": {
+                    "id": str(document.id),
+                    "filename": document.filename,
+                    "url": document.url,
+                    "preview": document.text_preview
+                }
+            }
+        )
 
     except Exception as e:
         # Log detallado del error
@@ -146,9 +169,13 @@ async def upload_file(
                 # Log error pero continuar con la respuesta de error original
                 logger.error(f"Error al eliminar archivo: {str(delete_error)}")
 
-        raise HTTPException(
+        return JSONResponse(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Error al procesar el archivo: {str(e)}"
+            content={
+                "code": 500,
+                "status": "error",
+                "detail": f"Error al procesar el archivo: {str(e)}"
+            }
         )
 
 # ¡IMPORTANTE! Colocar la ruta /documents ANTES que la ruta /{document_id}
@@ -168,15 +195,34 @@ async def list_documents_endpoint(
     Returns:
         Lista de documentos y metadata de paginación
     """
-    documents = await list_documents(db, limit, offset)
-    total = await count_documents(db)
+    try:
+        documents = await list_documents(db, limit, offset)
+        total = await count_documents(db)
 
-    return {
-        "items": [doc.to_dict() for doc in documents],
-        "total": total,
-        "limit": limit,
-        "offset": offset
-    }
+        return JSONResponse(
+            status_code=status.HTTP_200_OK,
+            content={
+                "code": 200,
+                "status": "success",
+                "data": {
+                    "items": [doc.to_dict() for doc in documents],
+                    "total": total,
+                    "limit": limit,
+                    "offset": offset
+                }
+            }
+        )
+    except Exception as e:
+        logger.error(f"Error al listar documentos: {str(e)}")
+        logger.error(traceback.format_exc())
+        return JSONResponse(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            content={
+                "code": 500,
+                "status": "error",
+                "detail": f"Error al obtener lista de documentos: {str(e)}"
+            }
+        )
 
 @router.get("/{document_id}", summary="Obtener metadata de un documento")
 async def get_document_by_id(
@@ -191,17 +237,40 @@ async def get_document_by_id(
     Returns:
         Metadata del documento (id, filename, url, preview, created_at)
     """
-    document = await get_document(db, document_id)
-    if not document:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Documento con ID {document_id} no encontrado"
+    try:
+        document = await get_document(db, document_id)
+        if not document:
+            return JSONResponse(
+                status_code=status.HTTP_404_NOT_FOUND,
+                content={
+                    "code": 404,
+                    "status": "error",
+                    "detail": f"Documento con ID {document_id} no encontrado"
+                }
+            )
+
+        return JSONResponse(
+            status_code=status.HTTP_200_OK,
+            content={
+                "code": 200,
+                "status": "success",
+                "data": document.to_dict()
+            }
+        )
+    except Exception as e:
+        logger.error(f"Error al obtener documento {document_id}: {str(e)}")
+        logger.error(traceback.format_exc())
+        return JSONResponse(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            content={
+                "code": 500,
+                "status": "error",
+                "detail": f"Error al obtener documento: {str(e)}"
+            }
         )
 
-    return document.to_dict()
 
-
-@router.get("/{document_id}/text", response_class=PlainTextResponse, summary="Obtener texto completo")
+@router.get("/{document_id}/text", summary="Obtener texto completo")
 async def get_document_text(
     document_id: uuid.UUID = Path(..., description="ID del documento"),
     db: AsyncSession = Depends(get_db)
@@ -214,14 +283,38 @@ async def get_document_text(
     Returns:
         Texto plano completo extraído del documento
     """
-    document = await get_document(db, document_id)
-    if not document:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Documento con ID {document_id} no encontrado"
+    try:
+        document = await get_document(db, document_id)
+        if not document:
+            return JSONResponse(
+                status_code=status.HTTP_404_NOT_FOUND,
+                content={
+                    "code": 404,
+                    "status": "error",
+                    "detail": f"Documento con ID {document_id} no encontrado"
+                }
+            )
+
+        # Para este endpoint específico mantenemos la respuesta como texto plano
+        # ya que es lo que espera el cliente (especificado con response_class=PlainTextResponse)
+        if not document.full_text:
+            return PlainTextResponse(
+                content="",
+                status_code=status.HTTP_200_OK
+            )
+
+        return PlainTextResponse(
+            content=document.full_text,
+            status_code=status.HTTP_200_OK
         )
-
-    if not document.full_text:
-        return ""
-
-    return document.full_text
+    except Exception as e:
+        logger.error(f"Error al obtener texto del documento {document_id}: {str(e)}")
+        logger.error(traceback.format_exc())
+        return JSONResponse(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            content={
+                "code": 500,
+                "status": "error",
+                "detail": f"Error al obtener texto del documento: {str(e)}"
+            }
+        )
