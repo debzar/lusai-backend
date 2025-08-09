@@ -3,12 +3,18 @@ from fastapi.responses import PlainTextResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 import uuid
 from typing import List, Optional
+import logging
+import traceback
 
 from app.services.supabase_upload import upload_file_to_supabase, delete_file_from_supabase
 from app.services.text_extractor import extract_text_from_bytes
 from app.services.docs_service import create_document, get_document, list_documents, count_documents
 from app.db.database import get_db
 from app.models.document import Document
+
+# Configurar logger
+logger = logging.getLogger(__name__)
+logging.basicConfig(level=logging.DEBUG)
 
 router = APIRouter()
 
@@ -39,6 +45,7 @@ async def upload_file(
     """
     # Validar tipo de archivo
     if file.content_type not in ALLOWED_TYPES:
+        logger.warning(f"Tipo de archivo no permitido: {file.content_type}")
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=f"Tipo de archivo no permitido. Solo PDF, DOC, DOCX o RTF. Recibido: {file.content_type}"
@@ -49,12 +56,14 @@ async def upload_file(
 
     # Validar tamaño del archivo
     if len(file_bytes) > MAX_FILE_SIZE:
+        logger.warning(f"Archivo demasiado grande: {len(file_bytes)} bytes")
         raise HTTPException(
             status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
             detail=f"El archivo excede el tamaño máximo permitido de {MAX_FILE_SIZE/1024/1024}MB"
         )
 
     if len(file_bytes) == 0:
+        logger.warning("Archivo vacío")
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="El archivo está vacío."
@@ -64,23 +73,34 @@ async def upload_file(
 
     try:
         # Subir archivo a Supabase
+        logger.info(f"Intentando subir archivo {file.filename} a Supabase")
         public_url = upload_file_to_supabase(file_bytes, file.filename, file.content_type)
+        logger.info(f"Archivo subido exitosamente a: {public_url}")
 
         # Extraer texto del documento
+        logger.info("Extrayendo texto del documento...")
         extracted_text = extract_text_from_bytes(file_bytes, file.content_type)
+        logger.debug(f"Texto extraído (primeros 100 caracteres): {extracted_text[:100] if extracted_text else None}")
 
         # Crear vista previa (primeros 1000 caracteres)
         text_preview = extracted_text[:1000] if extracted_text else None
 
         # Guardar metadata en la base de datos
-        document = await create_document(
-            db=db,
-            filename=file.filename,
-            url=public_url,
-            content_type=file.content_type,
-            text_preview=text_preview,
-            full_text=extracted_text
-        )
+        logger.info("Guardando metadata en base de datos...")
+        try:
+            document = await create_document(
+                db=db,
+                filename=file.filename,
+                url=public_url,
+                content_type=file.content_type,
+                text_preview=text_preview,
+                full_text=extracted_text
+            )
+            logger.info(f"Documento guardado con ID: {document.id}")
+        except Exception as db_error:
+            logger.error(f"ERROR AL GUARDAR EN BASE DE DATOS: {str(db_error)}")
+            logger.error(traceback.format_exc())
+            raise
 
         # Devolver respuesta
         return {
@@ -91,21 +111,53 @@ async def upload_file(
         }
 
     except Exception as e:
+        # Log detallado del error
+        logger.error(f"ERROR EN PROCESO DE SUBIDA: {str(e)}")
+        logger.error(traceback.format_exc())
+
         # Si hay error y el archivo ya se subió, eliminar
         if public_url:
+            logger.info(f"Intentando eliminar archivo subido: {public_url}")
             try:
                 # Extraer path del public_url para eliminación
                 path = public_url.split('/')[-1]
-                delete_file_from_supabase(path)
+                deleted = delete_file_from_supabase(path)
+                logger.info(f"Archivo eliminado: {deleted}")
             except Exception as delete_error:
                 # Log error pero continuar con la respuesta de error original
-                print(f"Error al eliminar archivo: {delete_error}")
+                logger.error(f"Error al eliminar archivo: {str(delete_error)}")
 
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Error al procesar el archivo: {str(e)}"
         )
 
+# ¡IMPORTANTE! Colocar la ruta /documents ANTES que la ruta /{document_id}
+# para evitar conflictos en la resolución de rutas
+@router.get("/documents", summary="Listar documentos")
+async def list_documents_endpoint(
+    limit: int = Query(10, ge=1, le=100, description="Número máximo de documentos"),
+    offset: int = Query(0, ge=0, description="Número de documentos a saltar"),
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    Lista documentos con paginación.
+
+    - **limit**: Número máximo de documentos a devolver (1-100)
+    - **offset**: Número de documentos a saltar para la paginación
+
+    Returns:
+        Lista de documentos y metadata de paginación
+    """
+    documents = await list_documents(db, limit, offset)
+    total = await count_documents(db)
+
+    return {
+        "items": [doc.to_dict() for doc in documents],
+        "total": total,
+        "limit": limit,
+        "offset": offset
+    }
 
 @router.get("/{document_id}", summary="Obtener metadata de un documento")
 async def get_document_by_id(
@@ -154,29 +206,3 @@ async def get_document_text(
         return ""
 
     return document.full_text
-
-
-@router.get("/documents", summary="Listar documentos")
-async def list_documents_endpoint(
-    limit: int = Query(10, ge=1, le=100, description="Número máximo de documentos"),
-    offset: int = Query(0, ge=0, description="Número de documentos a saltar"),
-    db: AsyncSession = Depends(get_db)
-):
-    """
-    Lista documentos con paginación.
-
-    - **limit**: Número máximo de documentos a devolver (1-100)
-    - **offset**: Número de documentos a saltar para la paginación
-
-    Returns:
-        Lista de documentos y metadata de paginación
-    """
-    documents = await list_documents(db, limit, offset)
-    total = await count_documents(db)
-
-    return {
-        "items": [doc.to_dict() for doc in documents],
-        "total": total,
-        "limit": limit,
-        "offset": offset
-    }
