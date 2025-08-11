@@ -5,6 +5,7 @@ Representa archivos subidos con su metadata y texto extraído.
 from sqlalchemy import Column, String, Text, TIMESTAMP
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.sql import func
+from sqlalchemy.orm import relationship
 import uuid
 
 from app.db.database import Base
@@ -21,9 +22,12 @@ class Document(Base):
     full_text = Column(Text)
     created_at = Column(TIMESTAMP(timezone=True), server_default=func.now())
 
+    # Relación con DocumentChunk
+    chunks = relationship("DocumentChunk", back_populates="document", cascade="all, delete-orphan")
+
     def __repr__(self):
         return f"<Document(id={self.id}, filename='{self.filename}')>"
-    
+
     def to_dict(self):
         """Convierte el modelo a un diccionario para la API"""
         return {
