@@ -198,7 +198,7 @@ async def list_documents_endpoint(
     try:
         documents = await list_documents(db, limit, offset)
         total = await count_documents(db)
-
+        
         return JSONResponse(
             status_code=status.HTTP_200_OK,
             content={
@@ -248,7 +248,7 @@ async def get_document_by_id(
                     "detail": f"Documento con ID {document_id} no encontrado"
                 }
             )
-
+        
         return JSONResponse(
             status_code=status.HTTP_200_OK,
             content={
@@ -294,7 +294,7 @@ async def get_document_text(
                     "detail": f"Documento con ID {document_id} no encontrado"
                 }
             )
-
+        
         # Para este endpoint específico mantenemos la respuesta como texto plano
         # ya que es lo que espera el cliente (especificado con response_class=PlainTextResponse)
         if not document.full_text:
@@ -302,7 +302,7 @@ async def get_document_text(
                 content="",
                 status_code=status.HTTP_200_OK
             )
-
+        
         return PlainTextResponse(
             content=document.full_text,
             status_code=status.HTTP_200_OK

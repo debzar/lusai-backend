@@ -158,7 +158,7 @@ def extract_from_rtf(rtf_bytes: bytes) -> str:
     try:
         sample = rtf_bytes[:100].decode('latin1', errors='replace')
         logger.debug(f"Primeros 100 bytes del archivo: {repr(sample)}")
-
+        
         # Verificar diferentes posibles inicios de RTF
         if '{\\rtf' in sample:
             logger.debug("Archivo RTF estándar detectado")
@@ -174,17 +174,17 @@ def extract_from_rtf(rtf_bytes: bytes) -> str:
             logger.debug("No se reconoce el formato del archivo")
     except Exception as e:
         logger.error(f"Error al examinar el inicio del archivo: {str(e)}")
-
+    
     # Intentar múltiples métodos de extracción
     result_text = ""
     errors = []
-
+    
     # 1. Método estándar - usando striprtf
     try:
         # Convertir bytes a string probando diferentes codificaciones
         encodings = ['utf-8', 'latin1', 'cp1252', 'iso-8859-1']
         rtf_text = None
-
+        
         for encoding in encodings:
             try:
                 rtf_text = rtf_bytes.decode(encoding, errors='replace')
@@ -192,7 +192,7 @@ def extract_from_rtf(rtf_bytes: bytes) -> str:
                 break
             except UnicodeDecodeError:
                 continue
-
+        
         if rtf_text:
             try:
                 plain_text = rtf_to_text(rtf_text)
@@ -203,7 +203,7 @@ def extract_from_rtf(rtf_bytes: bytes) -> str:
                 logger.warning(f"Error al procesar RTF con striprtf: {str(e)}")
     except Exception as e:
         errors.append(f"Error general en método 1: {str(e)}")
-
+    
     # 2. Método alternativo - extracción de texto simple
     try:
         if rtf_text:
@@ -213,26 +213,26 @@ def extract_from_rtf(rtf_bytes: bytes) -> str:
             simple_text = re.sub(r'[{}]|\\\n|\\\r', ' ', simple_text)
             # Eliminar múltiples espacios
             simple_text = re.sub(r'\s+', ' ', simple_text).strip()
-
+            
             if simple_text and len(simple_text) > 50:  # Resultado significativo
                 return sanitize_text(simple_text)
     except Exception as e:
         errors.append(f"Error en método 2: {str(e)}")
-
+    
     # 3. Último recurso - forzar decodificación e interpretación
     try:
         # Intentar extraer cualquier texto legible del archivo
         raw_text = rtf_bytes.decode('latin1', errors='replace')
-
+        
         # Buscar bloques de texto legibles (secuencias de al menos 5 caracteres imprimibles)
         text_blocks = re.findall(r'[A-Za-z0-9áéíóúüñÁÉÍÓÚÜÑ.,;:¿?¡! ]{5,}', raw_text)
-
+        
         if text_blocks:
             result = " ... ".join(text_blocks)
             return sanitize_text(result)
     except Exception as e:
         errors.append(f"Error en método 3: {str(e)}")
-
+    
     # Si llegamos aquí, ningún método funcionó
     error_detail = "; ".join(errors)
     logger.error(f"No se pudo extraer texto del RTF: {error_detail}")

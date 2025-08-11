@@ -47,36 +47,36 @@ def upload_file_to_supabase(file_bytes: bytes, filename: Optional[str] = None, c
     """
     if not filename:
         filename = f"{uuid.uuid4()}"
-
+    
     # Sanitizar nombre de archivo para evitar problemas
     # Eliminar caracteres especiales y espacios
     safe_filename = re.sub(r'[^\w\.-]', '_', filename)
-
+    
     # Guardar en subcarpeta según extensión
     ext = safe_filename.split('.')[-1].lower() if '.' in safe_filename else 'bin'
     path = f"uploads/{safe_filename}"
-
+    
     logger.debug(f"Iniciando subida a bucket '{SUPABASE_BUCKET}', path: '{path}'")
-
+    
     try:
         # Subir archivo con manejo de errores mejorado
         res = supabase.storage.from_(SUPABASE_BUCKET).upload(
-            path,
-            file_bytes,
+            path, 
+            file_bytes, 
             file_options={
                 "content-type": content_type or "application/octet-stream",
                 "x-upsert": "true"  # Sobrescribir si existe
             }
         )
-
+        
         if isinstance(res, dict) and res.get("error"):
             raise Exception(f"Error en respuesta de Supabase: {res['error']['message']}")
-
+        
         # Obtener URL pública
         public_url = supabase.storage.from_(SUPABASE_BUCKET).get_public_url(path)
         logger.info(f"Archivo subido exitosamente: {public_url}")
         return public_url
-
+        
     except Exception as e:
         logger.error(f"Error durante la subida a Supabase: {str(e)}")
         raise Exception(f"Error al subir archivo a Supabase: {str(e)}")
@@ -84,10 +84,10 @@ def upload_file_to_supabase(file_bytes: bytes, filename: Optional[str] = None, c
 def delete_file_from_supabase(path: str) -> bool:
     """
     Elimina un archivo de Supabase Storage por su path.
-
+    
     Args:
         path: Ruta del archivo en el bucket
-
+        
     Returns:
         True si se eliminó correctamente, False en caso contrario
     """
@@ -97,16 +97,16 @@ def delete_file_from_supabase(path: str) -> bool:
             parts = path.split('/')
             filename = parts[-1]
             path = f"uploads/{filename}"
-
+        
         logger.debug(f"Intentando eliminar archivo: {path}")
-
+        
         # Eliminar archivo
         res = supabase.storage.from_(SUPABASE_BUCKET).remove([path])
-
+        
         if isinstance(res, dict) and res.get("error"):
             logger.error(f"Error al eliminar archivo: {res['error']['message']}")
             return False
-
+            
         return True
     except Exception as e:
         logger.error(f"Error eliminando archivo de Supabase: {str(e)}")
