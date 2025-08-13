@@ -27,7 +27,7 @@ class Document(Base):
 
     def __repr__(self):
         return f"<Document(id={self.id}, filename='{self.filename}')>"
-
+    
     def to_dict(self):
         """Convierte el modelo a un diccionario para la API"""
         return {

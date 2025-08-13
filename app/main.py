@@ -1,9 +1,17 @@
+import logging
 from fastapi import FastAPI, Depends
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.db.database import get_db, engine, Base
 from contextlib import asynccontextmanager
 from app.routes import upload  # Importa el router correctamente
+
+# Configurar logging
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+)
+logger = logging.getLogger(__name__)
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):

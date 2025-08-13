@@ -3,6 +3,11 @@ __pycache__/
 *.py[cod]
 *$py.class
 
+# Environment variables
+.env
+.env.local
+.env.*.local
+
 # C extensions
 *.so
 
@@ -136,4 +141,3 @@ cython_debug/
 # System files
 .DS_Store
 Thumbs.db
-

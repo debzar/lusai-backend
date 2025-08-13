@@ -225,6 +225,93 @@ async def list_documents_endpoint(
             }
         )
 
+
+@router.get("/unindexed", summary="Obtener documentos sin indexar")
+async def get_unindexed_documents(
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    Obtiene la lista de documentos que no han sido indexados.
+
+    Returns:
+        Lista de documentos sin indexar
+    """
+    try:
+        unindexed_docs = await IndexService.get_unindexed_documents(db)
+
+        return JSONResponse(
+            status_code=status.HTTP_200_OK,
+            content={
+                "code": 200,
+                "status": "success",
+                "data": {
+                    "documents": [doc.to_dict() for doc in unindexed_docs],
+                    "count": len(unindexed_docs)
+                }
+            }
+        )
+
+    except Exception as e:
+        logger.error(f"Error al obtener documentos sin indexar: {str(e)}")
+        logger.error(traceback.format_exc())
+        return JSONResponse(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            content={
+                "code": 500,
+                "status": "error",
+                "detail": f"Error al obtener documentos sin indexar: {str(e)}"
+            }
+        )
+
+
+@router.post("/reindex", summary="Reindexar todos los documentos sin indexar")
+async def reindex_all_documents(
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    Indexa todos los documentos que no han sido indexados.
+
+    Returns:
+        Lista con resultados de indexación para cada documento
+    """
+    try:
+        results = await IndexService.reindex_all_unindexed(db)
+
+        # Contar éxitos y fallos
+        successful = len([r for r in results if "error" not in r])
+        failed = len([r for r in results if "error" in r])
+        total_chunks = sum([r.get("chunks_indexed", 0) for r in results])
+
+        return JSONResponse(
+            status_code=status.HTTP_200_OK,
+            content={
+                "code": 200,
+                "status": "success",
+                "data": {
+                    "results": results,
+                    "summary": {
+                        "total_documents": len(results),
+                        "successful": successful,
+                        "failed": failed,
+                        "total_chunks_created": total_chunks
+                    }
+                }
+            }
+        )
+
+    except Exception as e:
+        logger.error(f"Error en reindexación masiva: {str(e)}")
+        logger.error(traceback.format_exc())
+        return JSONResponse(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            content={
+                "code": 500,
+                "status": "error",
+                "detail": f"Error en reindexación: {str(e)}"
+            }
+        )
+
+
 @router.get("/{document_id}", summary="Obtener metadata de un documento")
 async def get_document_by_id(
     document_id: uuid.UUID = Path(..., description="ID del documento"),
@@ -321,44 +408,6 @@ async def get_document_text(
         )
 
 
-@router.get("/unindexed", summary="Obtener documentos sin indexar")
-async def get_unindexed_documents(
-    db: AsyncSession = Depends(get_db)
-):
-    """
-    Obtiene la lista de documentos que no han sido indexados.
-
-    Returns:
-        Lista de documentos sin indexar
-    """
-    try:
-        unindexed_docs = await IndexService.get_unindexed_documents(db)
-
-        return JSONResponse(
-            status_code=status.HTTP_200_OK,
-            content={
-                "code": 200,
-                "status": "success",
-                "data": {
-                    "documents": [doc.to_dict() for doc in unindexed_docs],
-                    "count": len(unindexed_docs)
-                }
-            }
-        )
-
-    except Exception as e:
-        logger.error(f"Error al obtener documentos sin indexar: {str(e)}")
-        logger.error(traceback.format_exc())
-        return JSONResponse(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            content={
-                "code": 500,
-                "status": "error",
-                "detail": f"Error al obtener documentos sin indexar: {str(e)}"
-            }
-        )
-
-
 @router.post("/index/{document_id}", summary="Indexar un documento específico")
 async def index_document(
     document_id: uuid.UUID = Path(..., description="ID del documento a indexar"),
@@ -374,7 +423,7 @@ async def index_document(
     """
     try:
         result = await IndexService.index_document(db, document_id)
-
+        
         return JSONResponse(
             status_code=status.HTTP_200_OK,
             content={
@@ -383,7 +432,7 @@ async def index_document(
                 "data": result
             }
         )
-
+        
     except ValueError as e:
         logger.warning(f"Error de validación al indexar documento {document_id}: {str(e)}")
         return JSONResponse(
@@ -406,50 +455,3 @@ async def index_document(
             }
         )
 
-
-@router.post("/reindex", summary="Reindexar todos los documentos sin indexar")
-async def reindex_all_documents(
-    db: AsyncSession = Depends(get_db)
-):
-    """
-    Indexa todos los documentos que no han sido indexados.
-
-    Returns:
-        Lista con resultados de indexación para cada documento
-    """
-    try:
-        results = await IndexService.reindex_all_unindexed(db)
-
-        # Contar éxitos y fallos
-        successful = len([r for r in results if "error" not in r])
-        failed = len([r for r in results if "error" in r])
-        total_chunks = sum([r.get("chunks_indexed", 0) for r in results])
-
-        return JSONResponse(
-            status_code=status.HTTP_200_OK,
-            content={
-                "code": 200,
-                "status": "success",
-                "data": {
-                    "results": results,
-                    "summary": {
-                        "total_documents": len(results),
-                        "successful": successful,
-                        "failed": failed,
-                        "total_chunks_created": total_chunks
-                    }
-                }
-            }
-        )
-
-    except Exception as e:
-        logger.error(f"Error en reindexación masiva: {str(e)}")
-        logger.error(traceback.format_exc())
-        return JSONResponse(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            content={
-                "code": 500,
-                "status": "error",
-                "detail": f"Error en reindexación: {str(e)}"
-            }
-        )
