@@ -21,7 +21,27 @@ client = AsyncOpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 MAX_CHUNK_CHARS = 2000
 CHUNK_OVERLAP = 200
 
+# Configuración para selección automática de modelo de embedding
+SMALL_DOCUMENT_THRESHOLD = 50000   # ~20 páginas
+LARGE_DOCUMENT_THRESHOLD = 150000  # ~60 páginas
+
 class IndexService:
+
+    @staticmethod
+    def _get_embedding_model(text_length: int) -> str:
+        """
+        Selecciona el modelo de embedding más apropiado basado en el tamaño del documento.
+
+        Args:
+            text_length: Longitud del texto en caracteres
+
+        Returns:
+            str: Nombre del modelo de embedding a usar
+        """
+        if text_length <= LARGE_DOCUMENT_THRESHOLD:
+            return "text-embedding-3-small"  # Rápido y económico para docs típicos
+        else:
+            return "text-embedding-3-large"  # Máxima precisión para docs complejos
 
     @staticmethod
     def _split_text_into_chunks(text: str, max_chars: int = MAX_CHUNK_CHARS, overlap: int = CHUNK_OVERLAP) -> List[str]:
@@ -53,12 +73,16 @@ class IndexService:
         return chunks
     
     @staticmethod
-    async def _generate_embedding(text: str) -> List[float]:
+    async def _generate_embedding(text: str, document_length: int = None) -> List[float]:
         try:
             clean_text = text.encode('utf-8', errors='ignore').decode('utf-8').strip()
 
             if not clean_text:
                 raise ValueError("Texto vacío después de limpieza")
+
+            # Seleccionar modelo basado en el tamaño del documento completo
+            model = IndexService._get_embedding_model(document_length or len(clean_text))
+            logger.info(f"Usando modelo {model} para documento de {document_length or len(clean_text)} caracteres")
 
             # ========================================
             # TODO: CAMBIAR A OPENAI CUANDO TENGAS API KEY
@@ -74,20 +98,23 @@ class IndexService:
 
             seed = int(hashlib.md5(clean_text.encode()).hexdigest()[:8], 16)
             random.seed(seed)
-            embedding_vector = [random.uniform(-1, 1) for _ in range(1536)]
 
-            logger.info(f"Embedding simulado generado para texto de {len(clean_text)} caracteres")
+            # Ajustar dimensiones según el modelo
+            dimensions = 3072 if model == "text-embedding-3-large" else 1536
+            embedding_vector = [random.uniform(-1, 1) for _ in range(dimensions)]
+
+            logger.info(f"Embedding simulado generado con {model} para texto de {len(clean_text)} caracteres")
             return embedding_vector
 
             # ========================================
             # CÓDIGO REAL DE OPENAI (DESCOMENTAR CUANDO TENGAS API KEY)
             # ========================================
             # response = await client.embeddings.create(
-            #     model="text-embedding-ada-002",
+            #     model=model,
             #     input=clean_text,
             #     encoding_format="float"
             # )
-            # logger.info(f"Embedding de OpenAI generado para texto de {len(clean_text)} caracteres")
+            # logger.info(f"Embedding de OpenAI generado con {model} para texto de {len(clean_text)} caracteres")
             # return response.data[0].embedding
             # ========================================
 
@@ -107,6 +134,12 @@ class IndexService:
             if not document.full_text:
                 raise ValueError(f"El documento {document_id} no tiene texto para indexar")
             
+            # Obtener métricas del documento
+            document_length = len(document.full_text)
+            selected_model = IndexService._get_embedding_model(document_length)
+
+            logger.info(f"Procesando documento {document_id} ({document_length} caracteres) con modelo {selected_model}")
+
             existing_chunks = await db.execute(
                 select(DocumentChunk).where(DocumentChunk.document_id == document_id)
             )
@@ -131,7 +164,8 @@ class IndexService:
                 try:
                     logger.info(f"Procesando chunk {i+1}/{len(chunks)} para documento {document_id}")
 
-                    embedding_vector = await IndexService._generate_embedding(chunk_text)
+                    # Pasar la longitud del documento completo para selección de modelo
+                    embedding_vector = await IndexService._generate_embedding(chunk_text, document_length)
                     logger.info(f"Embedding generado para chunk {i+1}, dimensiones: {len(embedding_vector)}")
 
                     chunk = DocumentChunk(
@@ -162,12 +196,14 @@ class IndexService:
             actual_chunks_count = verification_result.scalar()
             logger.info(f"Verificación: {actual_chunks_count} chunks encontrados en BD para documento {document_id}")
 
-            logger.info(f"Indexación completada para documento {document_id}: {chunks_created} chunks creados")
-            
+            logger.info(f"Indexación completada para documento {document_id}: {chunks_created} chunks creados con modelo {selected_model}")
+
             return {
                 "document_id": str(document_id),
                 "chunks_indexed": chunks_created,
-                "total_chunks": len(chunks)
+                "total_chunks": len(chunks),
+                "embedding_model": selected_model,
+                "document_size_chars": document_length
             }
             
         except Exception as e:
