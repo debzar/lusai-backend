@@ -4,6 +4,8 @@ Servicio principal de scraping para la Corte Constitucional de Colombia.
 
 import logging
 import re
+import asyncio
+import concurrent.futures
 from typing import List, Optional
 from .models import SearchRequest, SearchResult, Sentencia, ScrapingResponse
 from .config import ScrapingConfig
@@ -66,17 +68,39 @@ class ScrapingService:
     async def _try_selenium_extraction(self, url: str, palabra: str) -> List[SearchResult]:
         """Intenta extracción con Selenium."""
         try:
-            return self.selenium_extractor.extract(url, palabra)
+            logger.info("🔄 Intentando extracción con Selenium...")
+            # Ejecutar en un thread separado para no bloquear
+            loop = asyncio.get_event_loop()
+            with concurrent.futures.ThreadPoolExecutor() as executor:
+                resultado = await loop.run_in_executor(
+                    executor, 
+                    self.selenium_extractor.extract, 
+                    url, 
+                    palabra
+                )
+            logger.info(f"✅ Selenium completado, {len(resultado)} resultados")
+            return resultado
         except Exception as e:
-            logger.warning(f"Selenium no disponible: {e}")
+            logger.warning(f"❌ Selenium falló: {e}")
             return []
     
     async def _try_beautifulsoup_extraction(self, url: str, palabra: str) -> List[SearchResult]:
         """Intenta extracción con BeautifulSoup."""
         try:
-            return self.beautifulsoup_extractor.extract(url, palabra)
+            logger.info("🔄 Intentando extracción con BeautifulSoup...")
+            # Ejecutar en un thread separado para no bloquear
+            loop = asyncio.get_event_loop()
+            with concurrent.futures.ThreadPoolExecutor() as executor:
+                resultado = await loop.run_in_executor(
+                    executor, 
+                    self.beautifulsoup_extractor.extract, 
+                    url, 
+                    palabra
+                )
+            logger.info(f"✅ BeautifulSoup completado, {len(resultado)} resultados")
+            return resultado
         except Exception as e:
-            logger.warning(f"BeautifulSoup falló: {e}")
+            logger.warning(f"❌ BeautifulSoup falló: {e}")
             return []
     
     def _build_response(self, resultados: List[SearchResult], metodo: str, nota: Optional[str] = None) -> ScrapingResponse:

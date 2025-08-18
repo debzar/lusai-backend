@@ -10,7 +10,23 @@ from .config import ScrapingConfig
 def build_search_url(fecha_inicio: str, fecha_fin: str, palabra: str, extra: str = "", pagina: int = 0) -> str:
     """Construye la URL de búsqueda para la Corte Constitucional."""
     palabra_encoded = urllib.parse.quote(palabra, safe='')
-    return f"{ScrapingConfig.SEARCH_URL}/{fecha_inicio}/{fecha_fin}/{palabra_encoded}/{extra}/{pagina}"
+    
+    # Construir la URL evitando barras dobles
+    url_parts = [
+        ScrapingConfig.SEARCH_URL,
+        fecha_inicio,
+        fecha_fin,
+        palabra_encoded
+    ]
+    
+    # Agregar extra (si está vacío, usar "0" para mantener la estructura)
+    extra_param = extra if extra else "0"
+    url_parts.append(extra_param)
+    
+    # Agregar página
+    url_parts.append(str(pagina))
+    
+    return "/".join(url_parts)
 
 def extract_sentencia_number(texto: str) -> Optional[str]:
     """Extrae el número de sentencia del texto."""

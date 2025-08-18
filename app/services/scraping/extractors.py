@@ -110,7 +110,7 @@ class SeleniumExtractor:
                 return None
                 
             tema = extract_tema_from_text(texto, palabra)
-            subtema = extract_subtema_from_text(texto, palabra)
+            subtema = extract_tema_from_text(texto, palabra)
             
             # Buscar enlaces
             enlaces = elemento.find_elements(By.TAG_NAME, "a")
@@ -130,13 +130,17 @@ class SeleniumExtractor:
                 if año:
                     url_html, url_pdf = generate_sentencia_urls(titulo, año.group(1))
             
+            # Extraer resumen
+            resumen = self._extract_resumen(elemento)
+            
             return SearchResult(
                 tema=tema,
                 subtema=subtema,
                 providencias=[Sentencia(
                     titulo=titulo,
                     url_html=url_html,
-                    url_pdf=url_pdf
+                    url_pdf=url_pdf,
+                    resumen=resumen
                 )]
             )
             
@@ -197,11 +201,100 @@ class SeleniumExtractor:
         except Exception as e:
             logger.debug(f"Error buscando contexto: {e}")
             return None
+
+    def _extract_resumen(self, elemento) -> str:
+        """Extrae el resumen de la sentencia del elemento."""
+        try:
+            # Buscar específicamente en la clase resumen-texto que es donde está el resumen real
+            selectores_resumen = [
+                ".resumen-texto",
+                ".resumen p",
+                ".resumen",
+                "p.resumen-texto",
+                "[class*='resumen']"
+            ]
+            
+            for selector in selectores_resumen:
+                try:
+                    elemento_resumen = elemento.find_element(By.CSS_SELECTOR, selector)
+                    if elemento_resumen:
+                        texto = elemento_resumen.text.strip()
+                        if texto and len(texto) > 50:  # Debe ser un texto significativo
+                            return texto
+                except:
+                    continue
+            
+            # Si no encontramos un selector específico, buscar texto largo
+            texto_elemento = elemento.text.strip()
+            # Buscar párrafos largos que podrían ser el resumen
+            parrafos = elemento.find_elements(By.TAG_NAME, "p")
+            for parrafo in parrafos:
+                texto = parrafo.text.strip()
+                if len(texto) > 100:  # Párrafo largo probablemente es el resumen
+                    return texto
+            
+            return ""
+            
+        except Exception as e:
+            logger.debug(f"Error extrayendo resumen: {e}")
+            return ""
     
     def _cleanup(self):
         """Limpia recursos del driver."""
         if self.driver:
             self.driver.quit()
+    
+    def _extract_resumen(self, elemento) -> str:
+        """Extrae el resumen de la sentencia del elemento."""
+        try:
+            # Buscar específicamente en la clase resumen-texto que es donde está el resumen real
+            selectores_resumen = [
+                ".resumen-texto",
+                ".resumen p",
+                ".resumen",
+                "p.resumen-texto",
+                "[class*='resumen']"
+            ]
+            
+            for selector in selectores_resumen:
+                try:
+                    elemento_resumen = elemento.find_element(By.CSS_SELECTOR, selector)
+                    if elemento_resumen:
+                        texto = elemento_resumen.text.strip()
+                        if texto and len(texto) > 50:  # Debe ser un texto significativo
+                            return texto
+                except:
+                    continue
+            
+            # Si no se encuentra con selectores específicos, buscar en todo el elemento
+            texto_elemento = elemento.text
+            if "Resumen:" in texto_elemento:
+                # Extraer texto después de "Resumen:"
+                partes = texto_elemento.split("Resumen:")
+                if len(partes) > 1:
+                    resumen = partes[1].strip()
+                    if resumen and len(resumen) > 50:
+                        return resumen
+            
+            # Buscar en elementos que contengan "Resumen:" seguido de texto
+            try:
+                elementos_resumen = elemento.find_elements(By.XPATH, ".//*[contains(text(), 'Resumen:')]")
+                for elem in elementos_resumen:
+                    texto = elem.text.strip()
+                    if "Resumen:" in texto:
+                        resumen = texto.split("Resumen:")[1].strip()
+                        if resumen and len(resumen) > 50:
+                            return resumen
+            except:
+                pass
+            
+            return ""
+            
+        except Exception as e:
+            logger.debug(f"Error extrayendo resumen: {e}")
+            return ""
+    
+
 
 class BeautifulSoupExtractor:
     """Extractor usando BeautifulSoup para HTML estático."""
@@ -287,13 +380,17 @@ class BeautifulSoupExtractor:
                 if año:
                     url_html, url_pdf = generate_sentencia_urls(titulo, año.group(1))
             
+            # Extraer resumen
+            resumen = self._extract_resumen(elemento)
+            
             return SearchResult(
                 tema=tema,
                 subtema=subtema,
                 providencias=[Sentencia(
                     titulo=titulo,
                     url_html=url_html,
-                    url_pdf=url_pdf
+                    url_pdf=url_pdf,
+                    resumen=resumen
                 )]
             )
             
@@ -354,3 +451,95 @@ class BeautifulSoupExtractor:
         except Exception as e:
             logger.debug(f"Error buscando contexto: {e}")
             return None
+    
+    def _extract_resumen(self, elemento) -> str:
+        """Extrae el resumen de la sentencia del elemento usando BeautifulSoup."""
+        try:
+            # Buscar específicamente en la clase resumen-texto que es donde está el resumen real
+            selectores_resumen = [
+                ".resumen-texto",
+                ".resumen p",
+                ".resumen",
+                "p.resumen-texto",
+                "[class*='resumen']"
+            ]
+            
+            for selector in selectores_resumen:
+                try:
+                    elementos_resumen = elemento.select(selector)
+                    for elemento_resumen in elementos_resumen:
+                        texto = elemento_resumen.get_text(strip=True)
+                        if texto and len(texto) > 50:  # Debe ser un texto significativo
+                            return texto
+                except:
+                    continue
+            
+            # Si no se encuentra con selectores específicos, buscar en todo el elemento
+            texto_elemento = elemento.get_text()
+            if "Resumen:" in texto_elemento:
+                # Extraer texto después de "Resumen:"
+                partes = texto_elemento.split("Resumen:")
+                if len(partes) > 1:
+                    resumen = partes[1].strip()
+                    if resumen and len(resumen) > 50:
+                        return resumen
+            
+            # Buscar en elementos que contengan "Resumen:" seguido de texto
+            try:
+                elementos_resumen = elemento.find_all(text=re.compile(r'Resumen:', re.IGNORECASE))
+                for elem in elementos_resumen:
+                    if hasattr(elem, 'parent'):
+                        texto = elem.parent.get_text()
+                        if "Resumen:" in texto:
+                            resumen = texto.split("Resumen:")[1].strip()
+                            if resumen and len(resumen) > 50:
+                                return resumen
+            except:
+                pass
+            
+            return ""
+            
+        except Exception as e:
+            logger.debug(f"Error extrayendo resumen con BeautifulSoup: {e}")
+            return ""
+    
+    def _extract_magistrado(self, elemento) -> str:
+        """Extrae el nombre del magistrado del elemento usando BeautifulSoup."""
+        try:
+            # Buscar en diferentes selectores que puedan contener el magistrado
+            selectores_magistrado = [
+                ".magistrado",
+                ".magistrado-nombre",
+                ".presidente",
+                ".juez",
+                ".relator",
+                "span",
+                "div",
+                "td"
+            ]
+            
+            for selector in selectores_magistrado:
+                try:
+                    elementos_magistrado = elemento.select(selector)
+                    for elemento_magistrado in elementos_magistrado:
+                        texto = elemento_magistrado.get_text(strip=True)
+                        if texto and "Magistrado" in texto:
+                            # Extraer solo el nombre, no el título
+                            nombre = texto.replace("Magistrado", "").replace("Magistrada", "").strip()
+                            if nombre and len(nombre) > 2:
+                                return nombre
+                except:
+                    continue
+            
+            # Buscar texto que contenga "Magistrado" seguido de un nombre
+            texto_elemento = elemento.get_text()
+            patron_magistrado = r'Magistrado[ao]?\s*:?\s*([A-ZÁÉÍÓÚÑ][a-záéíóúñ\s]+)'
+            match = re.search(patron_magistrado, texto_elemento)
+            if match:
+                return match.group(1).strip()
+            
+            return ""
+            
+        except Exception as e:
+            logger.debug(f"Error extrayendo magistrado con BeautifulSoup: {e}")
+            return ""

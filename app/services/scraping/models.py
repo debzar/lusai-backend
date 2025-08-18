@@ -19,6 +19,7 @@ class Sentencia(BaseModel):
     titulo: str = Field(..., description="Número de la sentencia (ej: T-606/15)")
     url_html: str = Field("", description="Enlace a la sentencia en HTML")
     url_pdf: str = Field("", description="Enlace al PDF de la sentencia")
+    resumen: str = Field("", description="Resumen del caso o descripción de la sentencia")
 
 class SearchResult(BaseModel):
     """Modelo para resultados de búsqueda."""
