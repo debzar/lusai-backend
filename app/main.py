@@ -4,7 +4,7 @@ from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.db.database import get_db, engine, Base
 from contextlib import asynccontextmanager
-from app.routes import upload  # Importa el router correctamente
+from app.routes import upload, scraping  # Agregando el router de scraping
 
 # Configurar logging
 logging.basicConfig(
@@ -30,8 +30,9 @@ app = FastAPI(
     lifespan=lifespan
 )
 
-# Registrar las rutas de archivos con el prefijo /api/files
+# Incluir las rutas
 app.include_router(upload.router, prefix="/api/files", tags=["files"])
+app.include_router(scraping.router)
 
 @app.get("/")
 def root():

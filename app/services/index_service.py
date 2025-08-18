@@ -31,10 +31,10 @@ class IndexService:
     def _get_embedding_model(text_length: int) -> str:
         """
         Selecciona el modelo de embedding más apropiado basado en el tamaño del documento.
-
+        
         Args:
             text_length: Longitud del texto en caracteres
-
+            
         Returns:
             str: Nombre del modelo de embedding a usar
         """
@@ -98,7 +98,7 @@ class IndexService:
 
             seed = int(hashlib.md5(clean_text.encode()).hexdigest()[:8], 16)
             random.seed(seed)
-
+            
             # Ajustar dimensiones según el modelo
             dimensions = 3072 if model == "text-embedding-3-large" else 1536
             embedding_vector = [random.uniform(-1, 1) for _ in range(dimensions)]
@@ -137,9 +137,9 @@ class IndexService:
             # Obtener métricas del documento
             document_length = len(document.full_text)
             selected_model = IndexService._get_embedding_model(document_length)
-
+            
             logger.info(f"Procesando documento {document_id} ({document_length} caracteres) con modelo {selected_model}")
-
+            
             existing_chunks = await db.execute(
                 select(DocumentChunk).where(DocumentChunk.document_id == document_id)
             )
@@ -197,7 +197,7 @@ class IndexService:
             logger.info(f"Verificación: {actual_chunks_count} chunks encontrados en BD para documento {document_id}")
 
             logger.info(f"Indexación completada para documento {document_id}: {chunks_created} chunks creados con modelo {selected_model}")
-
+            
             return {
                 "document_id": str(document_id),
                 "chunks_indexed": chunks_created,

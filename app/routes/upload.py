@@ -238,7 +238,7 @@ async def get_unindexed_documents(
     """
     try:
         unindexed_docs = await IndexService.get_unindexed_documents(db)
-
+        
         return JSONResponse(
             status_code=status.HTTP_200_OK,
             content={
@@ -250,7 +250,7 @@ async def get_unindexed_documents(
                 }
             }
         )
-
+        
     except Exception as e:
         logger.error(f"Error al obtener documentos sin indexar: {str(e)}")
         logger.error(traceback.format_exc())
@@ -276,12 +276,12 @@ async def reindex_all_documents(
     """
     try:
         results = await IndexService.reindex_all_unindexed(db)
-
+        
         # Contar éxitos y fallos
         successful = len([r for r in results if "error" not in r])
         failed = len([r for r in results if "error" in r])
         total_chunks = sum([r.get("chunks_indexed", 0) for r in results])
-
+        
         return JSONResponse(
             status_code=status.HTTP_200_OK,
             content={
@@ -298,7 +298,7 @@ async def reindex_all_documents(
                 }
             }
         )
-
+        
     except Exception as e:
         logger.error(f"Error en reindexación masiva: {str(e)}")
         logger.error(traceback.format_exc())
