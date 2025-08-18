@@ -1,56 +1,28 @@
-from fastapi import APIRouter, HTTPException, Query
+"""
+Rutas para el servicio de scraping de la Corte Constitucional de Colombia.
+"""
+
+from fastapi import APIRouter, HTTPException
 from typing import List, Dict, Optional, Any
 from datetime import date, datetime
-from app.services.scraping_service import buscar_sentencias_async
+try:
+    from app.services.scraping import ScrapingService, SearchRequest, ScrapingResponse
+except ImportError:
+    from services.scraping import ScrapingService, SearchRequest, ScrapingResponse
 import logging
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/scraping", tags=["scraping"])
 
-from pydantic import BaseModel
-
-class BusquedaSentenciasRequest(BaseModel):
-    fecha_inicio: str
-    fecha_fin: str
-    palabra: str
-    extra: str = ""
-    pagina: int = 0
-
 @router.post("/sentencias")
-async def buscar_sentencias(request: BusquedaSentenciasRequest):
+async def buscar_sentencias(request: SearchRequest):
     """Endpoint POST para búsqueda de sentencias."""
-    return await _buscar_sentencias_internal(
-        request.fecha_inicio, 
-        request.fecha_fin, 
-        request.palabra, 
-        request.extra, 
-        request.pagina
-    )
-
-async def _buscar_sentencias_internal(
-    fecha_inicio: str,
-    fecha_fin: str,
-    palabra: str,
-    extra: str = "",
-    pagina: int = 0
-):
-    """
-    Función interna para buscar sentencias en la Corte Constitucional de Colombia.
-    
-    Retorna una lista de resultados con la siguiente estructura:
-    - tema: Clasificación temática de la sentencia
-    - subtema: Descripción más específica del tema
-    - providencias: Lista de sentencias encontradas, cada una con:
-      - titulo: Número de la sentencia (ej: T-606/15)
-      - url_html: Enlace a la sentencia en HTML
-      - url_pdf: Enlace al PDF (si está disponible)
-    """
     try:
         # Validar fechas
         try:
-            datetime.strptime(fecha_inicio, "%Y-%m-%d")
-            datetime.strptime(fecha_fin, "%Y-%m-%d")
+            datetime.strptime(request.fecha_inicio, "%Y-%m-%d")
+            datetime.strptime(request.fecha_fin, "%Y-%m-%d")
         except ValueError:
             raise HTTPException(
                 status_code=400,
@@ -58,45 +30,28 @@ async def _buscar_sentencias_internal(
             )
         
         # Validar que fecha_inicio sea menor que fecha_fin
-        if fecha_inicio > fecha_fin:
+        if request.fecha_inicio > request.fecha_fin:
             raise HTTPException(
                 status_code=400,
                 detail="La fecha de inicio debe ser menor que la fecha de fin"
             )
         
         # Validar palabra clave
-        if len(palabra.strip()) < 2:
+        if len(request.palabra.strip()) < 2:
             raise HTTPException(
                 status_code=400,
                 detail="La palabra clave debe tener al menos 2 caracteres"
             )
         
-        logger.info(f"Buscando sentencias: {fecha_inicio} a {fecha_fin}, palabra: '{palabra}', página: {pagina}")
+        logger.info(f"Buscando sentencias: {request.fecha_inicio} a {request.fecha_fin}, palabra: '{request.palabra}', página: {request.pagina}")
         
-        # Realizar búsqueda
-        resultados = await buscar_sentencias_async(
-            fecha_inicio=fecha_inicio,
-            fecha_fin=fecha_fin,
-            palabra=palabra,
-            extra=extra,
-            pagina=pagina
-        )
+        # Crear instancia del servicio y realizar búsqueda
+        scraping_service = ScrapingService()
+        response = await scraping_service.search_sentencias(request)
         
-        logger.info(f"Búsqueda completada. Encontrados {len(resultados)} resultados")
+        logger.info(f"Búsqueda completada. Encontrados {response.total_resultados} resultados")
         
-        return {
-            "status": "success",
-            "total_resultados": len(resultados),
-            "parametros": {
-                "fecha_inicio": fecha_inicio,
-                "fecha_fin": fecha_fin,
-                "palabra": palabra,
-                "extra": extra,
-                "pagina": pagina
-            },
-            "resultados": resultados,
-            "nota": "Este servicio combina scraping web con resultados de ejemplo debido a las limitaciones de contenido dinámico de la página de la Corte Constitucional"
-        }
+        return response
         
     except HTTPException:
         raise
@@ -107,10 +62,8 @@ async def _buscar_sentencias_internal(
             detail=f"Error interno del servidor: {str(e)}"
         )
 
-
-
 @router.post("/buscar-avanzado")
-async def buscar_avanzado(request: BusquedaSentenciasRequest):
+async def buscar_avanzado(request: SearchRequest):
     """
     Endpoint POST avanzado para búsquedas complejas de sentencias.
     Ideal para búsquedas con texto largo o múltiples parámetros.
@@ -151,21 +104,16 @@ async def buscar_avanzado(request: BusquedaSentenciasRequest):
         
         logger.info(f"Búsqueda avanzada: {request.fecha_inicio} a {request.fecha_fin}, palabra: '{request.palabra}', página: {request.pagina}")
         
-        # Realizar búsqueda
-        resultados = await buscar_sentencias_async(
-            fecha_inicio=request.fecha_inicio,
-            fecha_fin=request.fecha_fin,
-            palabra=request.palabra,
-            extra=request.extra,
-            pagina=request.pagina
-        )
+        # Crear instancia del servicio y realizar búsqueda
+        scraping_service = ScrapingService()
+        response = await scraping_service.search_sentencias(request)
         
-        logger.info(f"Búsqueda avanzada completada. Encontrados {len(resultados)} resultados")
+        logger.info(f"Búsqueda avanzada completada. Encontrados {response.total_resultados} resultados")
         
         return {
             "status": "success",
             "metodo": "POST avanzado",
-            "total_resultados": len(resultados),
+            "total_resultados": response.total_resultados,
             "parametros": {
                 "fecha_inicio": request.fecha_inicio,
                 "fecha_fin": request.fecha_fin,
@@ -173,7 +121,7 @@ async def buscar_avanzado(request: BusquedaSentenciasRequest):
                 "extra": request.extra,
                 "pagina": request.pagina
             },
-            "resultados": resultados,
+            "resultados": response.resultados,
             "nota": "Este endpoint POST es ideal para búsquedas con texto largo o múltiples parámetros"
         }
         
@@ -220,7 +168,6 @@ async def ejemplos_busqueda():
                     "pagina": 0
                 }
             },
-
             {
                 "descripcion": "Búsqueda avanzada con texto largo (POST)",
                 "url": "/scraping/buscar-avanzado",
