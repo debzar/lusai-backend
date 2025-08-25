@@ -14,9 +14,27 @@ API para la gestión de documentos legales con extracción de texto y almacenami
 ## 🛠️ Requisitos Previos
 
 - Python 3.8 o superior
-- PostgreSQL
+- PostgreSQL con extensión pgvector
 - Cuenta en Supabase (para almacenamiento de archivos)
 - Git
+
+### Instalación de pgvector
+
+1. **En Ubuntu/Debian**:
+   ```bash
+   sudo apt-get install postgresql-contrib
+   ```
+
+2. **Habilitar la extensión en PostgreSQL**:
+   Conéctate a tu base de datos PostgreSQL y ejecuta:
+   ```sql
+   CREATE EXTENSION IF NOT EXISTS vector;
+   ```
+
+3. **Verificar la instalación**:
+   ```sql
+   SELECT * FROM pg_available_extensions WHERE name = 'vector';
+   ```
 
 ## 🚀 Instalación
 
@@ -110,6 +128,7 @@ app/
 | `SUPABASE_URL` | URL de tu proyecto Supabase | ✅ |
 | `SUPABASE_KEY` | Clave de API de Supabase | ✅ |
 | `SUPABASE_BUCKET` | Nombre del bucket en Supabase Storage | ✅ |
+| `OPENAI_API_KEY` | Clave de API de OpenAI | ✅ |
 
 ## 🤝 Contribución
 
