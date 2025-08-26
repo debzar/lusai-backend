@@ -1,10 +1,12 @@
 import logging
 from fastapi import FastAPI, Depends
+from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.db.database import get_db, engine, Base
 from contextlib import asynccontextmanager
-from app.routes import upload, scraping  # Agregando el router de scraping
+from app.routes import upload, search  # Cambiando scraping por search
+from app.models import document, document_chunk
 
 # Configurar logging
 logging.basicConfig(
@@ -32,7 +34,7 @@ app = FastAPI(
 
 # Incluir las rutas
 app.include_router(upload.router, prefix="/api/files", tags=["files"])
-app.include_router(scraping.router)
+app.include_router(search.router)
 
 @app.get("/")
 def root():
