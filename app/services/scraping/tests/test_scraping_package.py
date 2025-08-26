@@ -89,8 +89,8 @@ def test_sync_functions():
         print(f"📜 Sentencia extraída: {sentencia}")
         
         # Probar configuración
-        headers = ScrapingConfig.get_headers()
-        print(f"⚙️ Headers configurados: {len(headers)} elementos")
+        chrome_options = ScrapingConfig.get_chrome_options()
+        print(f"⚙️ Opciones de Chrome configuradas: {len(chrome_options)} elementos")
         
         print("✅ Funciones síncronas funcionando correctamente!")
         return True

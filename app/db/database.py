@@ -7,8 +7,19 @@ load_dotenv()
 
 DATABASE_URL = os.getenv("DATABASE_URL")
 
-# Crear el engine
-engine = create_async_engine(DATABASE_URL, echo=True)
+# Crear el engine con configuración para evitar problemas de prepared statements
+engine = create_async_engine(
+    DATABASE_URL, 
+    echo=True,
+    pool_pre_ping=True,  # Verificar conexiones antes de usar
+    pool_size=5,         # Tamaño del pool
+    max_overflow=10,     # Conexiones adicionales permitidas
+    # Configuración específica para evitar problemas con pgbouncer
+    connect_args={
+        "statement_cache_size": 0,  # Deshabilitar cache de prepared statements
+        "prepared_statement_cache_size": 0,  # Deshabilitar cache de prepared statements
+    }
+)
 
 # Crear sesión asincrónica
 AsyncSessionLocal = sessionmaker(
