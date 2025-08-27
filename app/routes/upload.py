@@ -9,7 +9,7 @@ import traceback
 from app.services.supabase_upload import upload_file_to_supabase, delete_file_from_supabase
 from app.services.text_extractor import extract_text_from_bytes
 from app.services.docs_service import create_document, get_document, list_documents, count_documents
-from app.services.file_validator import validate_file_extension
+from app.services.file_validator import validate_file_extension, validate_and_fix_filename
 from app.services.index_service import IndexService
 from app.db.database import get_db
 from app.models.document import Document
@@ -83,39 +83,34 @@ async def upload_file(
             }
         )
 
-    # Validar que la extensión coincida con el contenido real del archivo
-    is_valid, message, detected_type = validate_file_extension(
+    # Validar y corregir automáticamente la extensión del archivo
+    is_valid, validation_message, detected_type, corrected_filename = validate_and_fix_filename(
         filename=file.filename,
         content_type=file.content_type,
         file_bytes=file_bytes
     )
 
-    if not is_valid:
-        logger.warning(f"Inconsistencia en extensión/tipo: {message}")
-        return JSONResponse(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            content={
-                "code": 422,
-                "status": "error",
-                "detail": message
-            }
-        )
+    # Usar el nombre corregido
+    final_filename = corrected_filename
+    final_content_type = detected_type
 
-    # Usar el tipo detectado si está disponible
-    effective_content_type = detected_type or file.content_type
-    logger.info(f"Tipo de contenido validado: {effective_content_type}")
+    # Log si hubo corrección
+    if final_filename != file.filename:
+        logger.info(f"📝 Archivo renombrado: {file.filename} → {final_filename}")
+
+    logger.info(f"✅ Validación: {validation_message}")
 
     public_url = None
 
     try:
-        # Subir archivo a Supabase
-        logger.info(f"Intentando subir archivo {file.filename} a Supabase")
-        public_url = upload_file_to_supabase(file_bytes, file.filename, effective_content_type)
+        # Subir archivo a Supabase con el nombre corregido
+        logger.info(f"Intentando subir archivo {final_filename} a Supabase")
+        public_url = upload_file_to_supabase(file_bytes, final_filename, final_content_type)
         logger.info(f"Archivo subido exitosamente a: {public_url}")
 
-        # Extraer texto del documento
+        # Extraer texto del documento usando el tipo detectado
         logger.info("Extrayendo texto del documento...")
-        extracted_text = extract_text_from_bytes(file_bytes, effective_content_type)
+        extracted_text = extract_text_from_bytes(file_bytes, final_content_type)
         logger.debug(f"Texto extraído (primeros 100 caracteres): {extracted_text[:100] if extracted_text else None}")
 
         # Crear vista previa (primeros 1000 caracteres)
@@ -126,9 +121,9 @@ async def upload_file(
         try:
             document = await create_document(
                 db=db,
-                filename=file.filename,
+                filename=final_filename,  # Usar el nombre corregido
                 url=public_url,
-                content_type=effective_content_type,
+                content_type=final_content_type,  # Usar el tipo detectado
                 text_preview=text_preview,
                 full_text=extracted_text
             )
@@ -139,18 +134,29 @@ async def upload_file(
             raise
 
         # Devolver respuesta con formato estandarizado
+        response_data = {
+            "code": 201,
+            "status": "success",
+            "data": {
+                "id": str(document.id),
+                "filename": document.filename,
+                "url": document.url,
+                "preview": document.text_preview,
+                "content_type": final_content_type
+            }
+        }
+        
+        # Agregar información sobre corrección de nombre si ocurrió
+        if final_filename != file.filename:
+            response_data["data"]["filename_correction"] = {
+                "original": file.filename,
+                "corrected": final_filename,
+                "reason": validation_message
+            }
+        
         return JSONResponse(
             status_code=status.HTTP_201_CREATED,
-            content={
-                "code": 201,
-                "status": "success",
-                "data": {
-                    "id": str(document.id),
-                    "filename": document.filename,
-                    "url": document.url,
-                    "preview": document.text_preview
-                }
-            }
+            content=response_data
         )
 
     except Exception as e:

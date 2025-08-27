@@ -125,3 +125,53 @@ def validate_file_extension(filename: str, content_type: str, file_bytes: bytes)
     
     # Todo correcto
     return True, "Validación exitosa", detected_type
+
+def validate_and_fix_filename(filename: str, content_type: str, file_bytes: bytes) -> Tuple[bool, str, str, str]:
+    """
+    Valida la extensión del archivo y la corrige automáticamente si es necesario.
+    
+    Args:
+        filename: Nombre del archivo incluyendo extensión
+        content_type: Tipo MIME declarado por el cliente
+        file_bytes: Contenido del archivo en bytes
+        
+    Returns:
+        Tupla con:
+        - bool: True si es válido o se pudo corregir
+        - str: Mensaje informativo
+        - str: Tipo MIME real detectado
+        - str: Nombre del archivo corregido (puede ser igual al original)
+    """
+    # Detectar tipo real basado en los bytes
+    detected_type = detect_file_type(file_bytes)
+    logger.debug(f"Archivo: {filename}, Tipo declarado: {content_type}, Tipo detectado: {detected_type}")
+    
+    # Si no pudimos detectar el tipo, usar el original
+    if not detected_type:
+        logger.warning(f"No se pudo detectar el tipo real del archivo {filename}")
+        return True, "No se pudo verificar el formato real del archivo, usando nombre original", content_type, filename
+    
+    # Obtener la extensión correcta para el tipo detectado
+    correct_extension = MIME_TO_EXTENSION.get(detected_type)
+    
+    if not correct_extension:
+        logger.warning(f"No hay extensión conocida para el tipo {detected_type}")
+        return True, f"Tipo detectado: {detected_type}, usando nombre original", detected_type, filename
+    
+    # Extraer extensión actual del archivo
+    current_extension = ""
+    base_name = filename
+    if "." in filename:
+        parts = filename.rsplit(".", 1)
+        base_name = parts[0]
+        current_extension = parts[1].lower()
+    
+    # Si la extensión actual no coincide con la correcta, corregir
+    if current_extension != correct_extension:
+        corrected_filename = f"{base_name}.{correct_extension}"
+        message = f"Archivo renombrado de '{filename}' a '{corrected_filename}' (tipo real: {correct_extension.upper()})"
+        logger.info(message)
+        return True, message, detected_type, corrected_filename
+    
+    # La extensión ya es correcta
+    return True, f"Validación exitosa, tipo: {correct_extension.upper()}", detected_type, filename

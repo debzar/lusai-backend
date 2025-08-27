@@ -5,7 +5,7 @@ from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.db.database import get_db, engine, Base
 from contextlib import asynccontextmanager
-from app.routes import upload, search  # Cambiando scraping por search
+from app.routes import upload, search, prompt_generator, sentencia_processor
 from app.models import document, document_chunk
 
 # Configurar logging
@@ -35,6 +35,8 @@ app = FastAPI(
 # Incluir las rutas
 app.include_router(upload.router, prefix="/api/files", tags=["files"])
 app.include_router(search.router)
+app.include_router(prompt_generator.router, prefix="/api", tags=["prompt-generator"])
+app.include_router(sentencia_processor.router, prefix="/api", tags=["sentencia-processor"])
 
 @app.get("/")
 def root():
